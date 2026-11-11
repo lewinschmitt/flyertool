@@ -1,0 +1,19 @@
+{
+  "name": "flyer-tool",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Koordination der Flyer-Verteilung für Freiwillige (Karte, Gebiete, Status)",
+  "scripts": {
+    "dev": "node dev.js",
+    "karten": "node scripts/karten.js",
+    "build": "node scripts/karten.js"
+  },
+  "engines": { "node": ">=20" },
+  "dependencies": {
+    "@neondatabase/serverless": "^1.0.0"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.2.17"
+  }
+}
