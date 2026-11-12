@@ -49,6 +49,12 @@ async function api(body) {
     login(S.role || hashPw || data.error ? 'Das Passwort stimmt nicht.' : '');
     throw new Error('auth');
   }
+  // Gesperrt nach zu vielen falschen Passwörtern: wer noch nicht angemeldet war, tippt neu.
+  if (res.status === 429 && !S.role) {
+    S.pw = ''; store.set('pw', '');
+    login(data.error || 'Zu viele Versuche – bitte später nochmals probieren.');
+    throw new Error('auth');
+  }
   if (data.areas) apply(data);
   if (!res.ok) { toast(data.error || 'Das hat leider nicht geklappt.'); throw new Error(data.error || 'error'); }
   return data;

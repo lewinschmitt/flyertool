@@ -22,6 +22,33 @@ class Fail extends Error {
   constructor(status, message) { super(message); this.status = status; }
 }
 
+// ---- Schutz vor Passwort-Raten ---------------------------------------------
+// Nach MAX_FAILURES falschen Passwörtern innert WINDOW_MIN Minuten wird der Absender gesperrt,
+// bis die ältesten Fehlversuche aus dem Zeitfenster gefallen sind. Die Sperre gilt auch für das
+// richtige Passwort – sonst liesse sich trotz Sperre weiterraten. Erfolgreiche Anmeldungen setzen
+// den Zähler nicht zurück, damit niemand mit dem Team-Passwort das Admin-Passwort durchprobieren kann.
+const MAX_FAILURES = 10;
+const WINDOW_MIN = 15;
+// Vercel setzt diese Kopfzeilen selbst; von aussen lassen sie sich dort nicht fälschen.
+const clientIp = (req) => String(
+  req.headers['x-real-ip'] || String(req.headers['x-forwarded-for'] || '').split(',')[0].trim()
+  || req.socket?.remoteAddress || 'unbekannt',
+).slice(0, 64);
+async function checkLimit(ip, res) {
+  const [row] = await q`
+    SELECT count(*)::int AS n,
+           CEIL(EXTRACT(EPOCH FROM (min(at) + make_interval(mins => ${WINDOW_MIN}) - now())))::int AS wait
+    FROM login_failures WHERE ip = ${ip} AND at > now() - make_interval(mins => ${WINDOW_MIN})`;
+  if (row.n < MAX_FAILURES) return;
+  const minutes = Math.max(1, Math.ceil(row.wait / 60));
+  res.setHeader('Retry-After', String(Math.max(1, row.wait)));
+  throw new Fail(429, `Zu viele falsche Passwörter. Bitte in ${minutes === 1 ? 'einer Minute' : `${minutes} Minuten`} nochmals versuchen.`);
+}
+async function noteFailure(ip) {
+  await q`INSERT INTO login_failures (ip) VALUES (${ip})`;
+  await q`DELETE FROM login_failures WHERE at < now() - interval '1 day'`;
+}
+
 // ---- Eingaben prüfen ------------------------------------------------------
 const text = (v, max) => String(v ?? '').trim().slice(0, max);
 const id = (v, what = 'Gebiet') => {
@@ -178,8 +205,14 @@ export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
   try {
     if (!TEAM_PW || !ADMIN_PW) throw new Fail(500, 'TEAM_PASSWORD und ADMIN_PASSWORD müssen in Vercel gesetzt sein.');
+    const ip = clientIp(req);
+    await checkLimit(ip, res);
     const role = roleOf(req);
-    if (!role) throw new Fail(401, 'Passwort stimmt nicht.');
+    if (!role) {
+      // Ohne Passwort (erster Aufruf) zählt nicht als Fehlversuch.
+      if (req.headers['x-password']) await noteFailure(ip);
+      throw new Fail(401, 'Passwort stimmt nicht.');
+    }
 
     let wanted = new URL(req.url, 'http://x').searchParams.get('c');
     if (req.method === 'POST') {
