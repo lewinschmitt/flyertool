@@ -38,6 +38,7 @@ Läuft auf http://localhost:3000 mit einer eingebetteten Datenbank in `./.locald
 | `api/data.js` | Die einzige Server-Funktion: liefert den Stand und führt Aktionen aus |
 | `lib/db.js` | Datenbankzugriff und Tabellenschema |
 | `lib/seed.js` | Startdaten der 34 Gebiete |
+| `lib/altnotizen.js` | Kommentare aus dem bisherigen Tool, werden einmalig als Notizen eingespielt |
 | `lib/grenzen.js` | Grenzen der Gebiete als GeoJSON-Flächen |
 | `public/karten/` | Detailpläne der Gebiete (PNG) |
 | `dev.js` | Lokaler Entwicklungsserver |

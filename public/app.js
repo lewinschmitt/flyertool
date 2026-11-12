@@ -7,7 +7,11 @@ const store = {
   get(k) { try { return localStorage.getItem('flyer.' + k) || ''; } catch { return ''; } },
   set(k, v) { try { localStorage.setItem('flyer.' + k, v); } catch { /* privater Modus */ } },
 };
-const day = (d) => new Date(d).toLocaleDateString('de-CH', { day: 'numeric', month: 'short' });
+// «12. Nov.» – bei älteren Einträgen mit Jahr, damit übernommene Notizen einzuordnen sind.
+const day = (d) => {
+  const t = new Date(d);
+  return t.toLocaleDateString('de-CH', { day: 'numeric', month: 'short', ...(t.getFullYear() !== new Date().getFullYear() && { year: 'numeric' }) });
+};
 const sameName = (a, b) => !!a && !!b && a.trim().toLowerCase() === b.trim().toLowerCase();
 // «1000-1200» → 1200, «ca. 250» → 250, «» → 0
 const flyerNum = (t) => { const m = /(\d+)(?:\s*[-–]\s*(\d+))?/.exec(t || ''); return m ? Number(m[2] || m[1]) : 0; };
