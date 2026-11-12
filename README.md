@@ -5,6 +5,7 @@ Koordiniert, wer in welchem Gebiet Flyer verteilt – mit Karte, mehreren parall
 ## Was es kann
 
 - **Karte und Liste** aller Gebiete: pink = frei, gelb = vergeben, grün = verteilt
+- **Filter «Nur freie Gebiete»** auf Karte und Liste: hebt hervor, was noch niemand übernommen hat; alles andere tritt in den Hintergrund
 - **Kampagnen-Umschalter** oben: jede Kampagne hat ihren eigenen Verteilstand, die Gebiete bleiben dieselben
 - **Für Freiwillige**: Link öffnen, Vorname + Team-Passwort (einmalig), Gebiet antippen, «Ich übernehme dieses Gebiet», später «Fertig verteilt»
 - **Notizen pro Gebiet** bleiben über Kampagnen hinweg erhalten (z. B. «Briefkästen im Innenhof»)

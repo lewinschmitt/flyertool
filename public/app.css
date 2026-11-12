@@ -65,6 +65,11 @@ main { flex: 1; position: relative; min-height: 0; }
 .legend span { display: flex; align-items: center; gap: 4px; }
 .dot { width: 11px; height: 11px; border-radius: 4px; display: inline-block; }
 .dot.free { background: var(--free); } .dot.claimed { background: var(--claimed); } .dot.done { background: var(--done); }
+.filter { position: absolute; left: 10px; top: 46px; z-index: 2; border: 2px solid var(--free); background: #fff; color: var(--free); border-radius: 99px; padding: 6px 12px; font-size: 13px; font-weight: 700; cursor: pointer; box-shadow: 0 1px 5px rgba(0,0,0,.2); }
+.filter[aria-pressed=true] { background: var(--free); color: #fff; }
+.list .filter { position: static; box-shadow: none; margin: 0 0 4px 2px; }
+.pin.dim { opacity: .55; }
+.pin.dim .badge { background: #8a9285; color: #fff; font-size: 10px; padding: 1px 4px; min-width: 0; border-width: 1px; border-radius: 6px; box-shadow: none; }
 .fab { position: absolute; right: 10px; bottom: 34px; z-index: 2; width: 46px; height: 46px; border-radius: 50%; border: 0; background: #fff; color: var(--green); box-shadow: 0 1px 6px rgba(0,0,0,.3); cursor: pointer; display: grid; place-items: center; }
 .drawbar { position: absolute; top: 10px; left: 10px; right: 10px; z-index: 4; background: var(--ink); color: #fff; border-radius: 12px; padding: 8px 8px 8px 14px; display: flex; align-items: center; gap: 8px; font-size: 14px; }
 .drawbar span { flex: 1; }

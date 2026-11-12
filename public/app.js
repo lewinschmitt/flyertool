@@ -31,6 +31,7 @@ const S = {
   view: 'map',
   drawing: null,
   fitted: false,
+  onlyFree: store.get('onlyFree') === '1',
 };
 const area = (id) => S.areas.find((a) => a.id === id);
 const isMine = (a) => a.status !== 'free' && sameName(a.person, S.name);
@@ -141,6 +142,8 @@ function tap(a) {
 function renderMap() {
   shapes.clearLayers();
   const interactive = !S.drawing;
+  // Filter «Nur freie»: vergebene und verteilte Gebiete treten in den Hintergrund (bleiben aber antippbar).
+  const dimmed = (a) => S.onlyFree && a.status !== 'free' && a.id !== S.selected;
   const bounds = L.latLngBounds([]);
   for (const a of S.areas) {
     const selected = a.id === S.selected;
@@ -149,7 +152,9 @@ function renderMap() {
         interactive,
         // Ohne dies würde der Klick zur Karte weiterwandern und das eben geöffnete Gebiet gleich wieder schliessen.
         bubblingMouseEvents: false,
-        style: { color: selected ? '#1c2416' : COLORS[a.status], weight: selected ? 4 : 2.5, fillColor: COLORS[a.status], fillOpacity: a.status === 'done' ? 0.45 : 0.3 },
+        style: dimmed(a)
+          ? { color: '#8a9285', weight: 1, fillColor: '#8a9285', fillOpacity: 0.08 }
+          : { color: selected ? '#1c2416' : COLORS[a.status], weight: selected ? 4 : S.onlyFree ? 3.5 : 2.5, fillColor: COLORS[a.status], fillOpacity: a.status === 'done' || S.onlyFree ? 0.45 : 0.3 },
       });
       if (interactive) poly.on('click', () => tap(a));
       shapes.addLayer(poly);
@@ -159,11 +164,11 @@ function renderMap() {
     const pin = L.marker(c, {
       interactive,
       keyboard: false,
-      zIndexOffset: selected ? 1000 : 0,
+      zIndexOffset: selected ? 1000 : dimmed(a) ? -500 : 0,
       icon: L.divIcon({
         className: '',
         iconSize: [0, 0],
-        html: `<div class="pin${selected ? ' sel' : ''}"><span class="badge ${a.status}${isMine(a) ? ' mine' : ''}">${esc(a.code || a.name)}${MARK[a.status]}</span></div>`,
+        html: `<div class="pin${selected ? ' sel' : ''}${dimmed(a) ? ' dim' : ''}"><span class="badge ${a.status}${isMine(a) ? ' mine' : ''}">${esc(a.code || a.name)}${MARK[a.status]}</span></div>`,
       }),
     });
     if (interactive) pin.on('click', () => tap(a));
@@ -216,6 +221,8 @@ $('#drawDone').onclick = () => {
 function renderHeader() {
   $('#who').textContent = S.name || 'Name';
   $('#adminBtn').hidden = S.role !== 'admin';
+  $('#onlyFree').textContent = filterLabel();
+  $('#onlyFree').setAttribute('aria-pressed', S.onlyFree);
   const sel = $('#campaign');
   sel.innerHTML = S.campaigns.length
     ? S.campaigns.map((c) => `<option value="${c.id}"${c.id === S.campaign ? ' selected' : ''}>${esc(c.name)}${c.archived ? ' (abgeschlossen)' : ''}</option>`).join('')
@@ -234,6 +241,17 @@ $('#campaign').onchange = (e) => { S.campaign = Number(e.target.value); load(); 
 $('#who').onclick = () => login();
 $('#adminBtn').onclick = () => { S.selected = null; openAdmin(); renderMap(); };
 
+/* ---------- Filter «Nur freie Gebiete» ---------- */
+const freeCount = () => S.areas.filter((a) => a.status === 'free').length;
+const filterLabel = () => `${S.onlyFree ? '✓ ' : ''}Nur freie Gebiete (${freeCount()})`;
+function toggleOnlyFree() {
+  S.onlyFree = !S.onlyFree;
+  store.set('onlyFree', S.onlyFree ? '1' : '');
+  if (S.onlyFree && !freeCount()) toast('In dieser Kampagne ist kein Gebiet mehr frei.');
+  render();
+}
+$('#onlyFree').onclick = toggleOnlyFree;
+
 /* ---------- Liste ---------- */
 function renderList() {
   const box = $('#list');
@@ -241,6 +259,7 @@ function renderList() {
   box.hidden = false;
   const mineOnly = S.view === 'mine';
   const pool = mineOnly ? S.areas.filter(isMine) : S.areas;
+  const filter = mineOnly || !S.areas.length ? '' : `<button type="button" class="filter" data-filter aria-pressed="${S.onlyFree}">${filterLabel()}</button>`;
   if (!currentCampaign()) { box.innerHTML = '<p class="empty">Es läuft gerade keine Kampagne.</p>'; return; }
   if (!pool.length) {
     box.innerHTML = `<p class="empty">${mineOnly
@@ -250,8 +269,9 @@ function renderList() {
   }
   const groups = mineOnly
     ? [['claimed', 'Noch zu verteilen'], ['done', 'Erledigt – danke!']]
-    : [['free', 'Noch frei'], ['claimed', 'Vergeben'], ['done', 'Verteilt']];
-  box.innerHTML = groups.map(([status, title]) => {
+    : S.onlyFree ? [['free', 'Noch frei']]
+      : [['free', 'Noch frei'], ['claimed', 'Vergeben'], ['done', 'Verteilt']];
+  box.innerHTML = filter + (groups.map(([status, title]) => {
     const rows = pool.filter((a) => a.status === status);
     if (!rows.length) return '';
     return `<h2>${title} (${rows.length})</h2>` + rows.map((a) => {
@@ -263,9 +283,10 @@ function renderList() {
         <span class="txt"><b>${esc(a.name)}</b><small>${detail}</small></span>
       </button>`;
     }).join('');
-  }).join('');
+  }).join('') || '<p class="empty">In dieser Kampagne ist kein Gebiet mehr frei.</p>');
 }
 $('#list').onclick = (e) => {
+  if (e.target.closest('[data-filter]')) return toggleOnlyFree();
   const row = e.target.closest('.row');
   if (row) select(Number(row.dataset.id), true);
 };
@@ -273,7 +294,7 @@ $('#list').onclick = (e) => {
 function setView(view) {
   S.view = view;
   document.querySelectorAll('.tabs button').forEach((b) => b.classList.toggle('on', b.dataset.view === view));
-  $('#legend').hidden = $('#locate').hidden = view !== 'map';
+  $('#legend').hidden = $('#locate').hidden = $('#onlyFree').hidden = view !== 'map';
   renderList();
   if (view === 'map') map.invalidateSize();
 }
