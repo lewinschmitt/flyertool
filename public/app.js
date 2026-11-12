@@ -12,7 +12,15 @@ const day = (d) => {
   const t = new Date(d);
   return t.toLocaleDateString('de-CH', { day: 'numeric', month: 'short', ...(t.getFullYear() !== new Date().getFullYear() && { year: 'numeric' }) });
 };
-const sameName = (a, b) => !!a && !!b && a.trim().toLowerCase() === b.trim().toLowerCase();
+// Namen erscheinen überall als «Vorname N.» (gleiche Regel wie in lib/name.js).
+function shortName(value) {
+  const t = String(value ?? '').trim().replace(/\s+/g, ' ');
+  if (/[,&+/]| und /i.test(t)) return t;
+  const parts = t.split(' ');
+  const initial = parts.length > 1 ? [...parts.at(-1)][0] : '';
+  return /\p{L}/u.test(initial) ? `${parts[0]} ${initial.toUpperCase()}.` : t;
+}
+const sameName = (a, b) => !!a && !!b && shortName(a).toLowerCase() === shortName(b).toLowerCase();
 // «1000-1200» → 1200, «ca. 250» → 250, «» → 0
 const flyerNum = (t) => { const m = /(\d+)(?:\s*[-–]\s*(\d+))?/.exec(t || ''); return m ? Number(m[2] || m[1]) : 0; };
 const STATUS = { free: 'frei', claimed: 'vergeben', done: 'verteilt' };
@@ -26,7 +34,7 @@ if (hashPw) { store.set('pw', hashPw); history.replaceState(null, '', location.p
 
 const S = {
   pw: store.get('pw'),
-  name: store.get('name'),
+  name: shortName(store.get('name')),
   role: null,
   campaigns: [],
   campaign: Number(params.get('k') || store.get('campaign')) || null,
@@ -533,7 +541,7 @@ const ADMIN = {
   async invite() {
     const v = await ask({
       title: 'Einladungslink',
-      text: 'Mit dem Team-Passwort im Link müssen Freiwillige nur noch ihren Vornamen eingeben. Leer lassen für einen Link ohne Passwort.',
+      text: 'Mit dem Team-Passwort im Link müssen Freiwillige nur noch ihren Namen eingeben. Leer lassen für einen Link ohne Passwort.',
       fields: [{ name: 'pw', label: 'Team-Passwort (nicht das Admin-Passwort)' }], ok: 'Link kopieren',
     });
     if (!v) return;
@@ -585,11 +593,11 @@ async function login(error) {
   const v = await ask({
     title: needPw ? 'Willkommen!' : 'Dein Name',
     text: needPw
-      ? 'Hier koordinieren wir, wer wo Flyer verteilt. Gib deinen Vornamen und das Team-Passwort ein – das brauchst du nur einmal.'
-      : 'Unter diesem Namen sehen die anderen, welche Gebiete du übernommen hast.',
+      ? 'Hier koordinieren wir, wer wo Flyer verteilt. Gib deinen Namen und das Team-Passwort ein – das brauchst du nur einmal.'
+      : 'Unter diesem Namen sehen die anderen, welche Gebiete du übernommen hast. Vom Nachnamen bleibt nur der erste Buchstabe.',
     error,
     fields: [
-      { name: 'name', label: 'Vorname', value: S.name, required: true, maxlength: 40, autocomplete: 'given-name' },
+      { name: 'name', label: 'Vorname und erster Buchstabe des Nachnamens', placeholder: 'z. B. Anna M.', value: S.name, required: true, maxlength: 40, autocomplete: 'name' },
       ...(needPw ? [{ name: 'pw', label: 'Team-Passwort', type: 'password', required: true, autocomplete: 'current-password' }] : []),
     ],
     ok: needPw ? 'Los geht’s' : 'Speichern',
@@ -597,7 +605,7 @@ async function login(error) {
   });
   loggingIn = false;
   if (!v) return;
-  S.name = v.name.trim(); store.set('name', S.name);
+  S.name = shortName(v.name); store.set('name', S.name);
   if (needPw) { S.pw = v.pw; store.set('pw', S.pw); load(); } else render();
 }
 async function needName() {

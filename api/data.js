@@ -1,5 +1,6 @@
 import { timingSafeEqual, createHash } from 'node:crypto';
 import { q, query, INSERT_AREAS } from '../lib/db.js';
+import { shortName } from '../lib/name.js';
 
 const local = !process.env.VERCEL;
 const TEAM_PW = process.env.TEAM_PASSWORD || (local ? 'gruen' : '');
@@ -61,7 +62,8 @@ const required = (v, max, message) => {
   if (!t) throw new Fail(400, message);
   return t;
 };
-const person = (v) => required(v, 40, 'Bitte gib deinen Namen an.');
+// Namen werden immer als «Vorname N.» gespeichert, egal was die Oberfläche schickt.
+const person = (v) => required(shortName(text(v, 80)), 40, 'Bitte gib deinen Namen an.');
 const count = (v) => {
   if (v === '' || v === null || v === undefined) return null;
   const n = Math.round(Number(v));
