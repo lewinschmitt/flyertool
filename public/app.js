@@ -87,32 +87,69 @@ map.pm.setLang('de');
 const shapes = L.layerGroup().addTo(map);
 const COLORS = { free: '#c4006a', claimed: '#f2b705', done: '#3f8f1f' };
 
+// Äussere Ringe einer Fläche als Listen von [lng, lat].
+const ringsOf = (g) => (g.type === 'Polygon' ? [g.coordinates[0]] : g.type === 'MultiPolygon' ? g.coordinates.map((p) => p[0]) : [])
+  .filter((r) => Array.isArray(r) && r.length > 2);
+const ringArea = (r) => r.reduce((sum, p, i) => { const q = r[(i + 1) % r.length]; return sum + p[0] * q[1] - q[0] * p[1]; }, 0) / 2;
+
+// Punkt für die Marke: Schwerpunkt der grössten Teilfläche. Liegt er ausserhalb (verwinkelte Gebiete),
+// wird er auf gleicher Höhe in die Mitte des breitesten Stücks der Fläche geschoben.
 function centerOf(a) {
-  if (a.geometry.type === 'Point') return L.latLng(a.geometry.coordinates[1], a.geometry.coordinates[0]);
-  return L.geoJSON(a.geometry).getBounds().getCenter();
+  const g = a.geometry;
+  if (g.type === 'Point') return L.latLng(g.coordinates[1], g.coordinates[0]);
+  const ring = ringsOf(g).sort((p, q) => Math.abs(ringArea(q)) - Math.abs(ringArea(p)))[0];
+  const area = ring ? ringArea(ring) : 0;
+  if (!area) return L.geoJSON(g).getBounds().getCenter();
+  let x = 0, y = 0;
+  const cuts = [];
+  ring.forEach((p, i) => {
+    const q = ring[(i + 1) % ring.length];
+    const f = p[0] * q[1] - q[0] * p[1];
+    x += (p[0] + q[0]) * f; y += (p[1] + q[1]) * f;
+  });
+  x /= 6 * area; y /= 6 * area;
+  ring.forEach((p, i) => {
+    const q = ring[(i + 1) % ring.length];
+    if ((p[1] > y) !== (q[1] > y)) cuts.push(p[0] + ((y - p[1]) / (q[1] - p[1])) * (q[0] - p[0]));
+  });
+  cuts.sort((m, n) => m - n);
+  let best = null;
+  for (let i = 0; i + 1 < cuts.length; i += 2) {
+    if (cuts[i] <= x && x <= cuts[i + 1]) return L.latLng(y, x);
+    if (!best || cuts[i + 1] - cuts[i] > best[1] - best[0]) best = [cuts[i], cuts[i + 1]];
+  }
+  return L.latLng(y, best ? (best[0] + best[1]) / 2 : x);
+}
+const boundsOf = (a) => (a.geometry.type === 'Point' ? L.latLngBounds([centerOf(a)]) : L.geoJSON(a.geometry).getBounds());
+// Gebiet ins Bild holen: Flächen ganz zeigen, Punkte in der Nähe.
+function focus(a, minZoom) {
+  if (a.geometry.type === 'Point') map.setView(centerOf(a), Math.max(map.getZoom(), minZoom));
+  else map.fitBounds(boundsOf(a), { maxZoom: 16, paddingTopLeft: [24, 24], paddingBottomRight: [24, Math.round(map.getSize().y * 0.45)] });
 }
 
 function tap(a) {
-  if (map.getZoom() < FAR) map.setView(centerOf(a), 14.5);
+  if (map.getZoom() < FAR) focus(a, 14.5);
   else select(a.id);
 }
 
 function renderMap() {
   shapes.clearLayers();
   const interactive = !S.drawing;
-  const centers = [];
+  const bounds = L.latLngBounds([]);
   for (const a of S.areas) {
     const selected = a.id === S.selected;
     if (a.geometry.type !== 'Point') {
       const poly = L.geoJSON(a.geometry, {
         interactive,
-        style: { color: selected ? '#1c2416' : COLORS[a.status], weight: selected ? 4 : 2, fillColor: COLORS[a.status], fillOpacity: a.status === 'done' ? 0.45 : 0.3 },
+        // Ohne dies würde der Klick zur Karte weiterwandern und das eben geöffnete Gebiet gleich wieder schliessen.
+        bubblingMouseEvents: false,
+        style: { color: selected ? '#1c2416' : COLORS[a.status], weight: selected ? 4 : 2.5, fillColor: COLORS[a.status], fillOpacity: a.status === 'done' ? 0.45 : 0.3 },
       });
       if (interactive) poly.on('click', () => tap(a));
       shapes.addLayer(poly);
     }
     const c = centerOf(a);
-    centers.push(c);
+    bounds.extend(boundsOf(a));
     const pin = L.marker(c, {
       interactive,
       keyboard: false,
@@ -126,9 +163,9 @@ function renderMap() {
     if (interactive) pin.on('click', () => tap(a));
     shapes.addLayer(pin);
   }
-  if (!S.fitted && centers.length) {
+  if (!S.fitted && bounds.isValid()) {
     S.fitted = true;
-    map.fitBounds(L.latLngBounds(centers), { padding: [24, 24] });
+    map.fitBounds(bounds, { padding: [24, 24] });
     markFar();
   }
 }
@@ -245,7 +282,7 @@ function select(id, fromList) {
   const a = area(id);
   if (a && (fromList || S.view !== 'map')) {
     setView('map');
-    map.setView(centerOf(a), Math.max(map.getZoom(), 15));
+    focus(a, 15);
   }
   renderMap();
   renderSheet(true);

@@ -37,10 +37,14 @@ Läuft auf http://localhost:3000 mit einer eingebetteten Datenbank in `./.locald
 | `api/data.js` | Die einzige Server-Funktion: liefert den Stand und führt Aktionen aus |
 | `lib/db.js` | Datenbankzugriff und Tabellenschema |
 | `lib/seed.js` | Startdaten der 34 Gebiete |
+| `lib/grenzen.js` | Grenzen der Gebiete als GeoJSON-Flächen |
+| `public/karten/` | Detailpläne der Gebiete (PNG) |
 | `dev.js` | Lokaler Entwicklungsserver |
 
 ## Gut zu wissen
 
-- Die Gebiete starten als **Punkte an ungefährer Lage** (aus der alten Übersichtskarte geschätzt). Unter «Verwalten» bzw. im Gebiet → «Fläche einzeichnen» wird daraus eine genaue Fläche.
-- Die **Detailpläne** liegen in `public/karten/`. Beim Build auf Vercel (und mit `npm run karten`) lädt `scripts/karten.js` alle fehlenden Bilder von `ps-ps.ch/gruene-6-10/karten/`. Am besten einmal `npm run karten` ausführen und die Bilder committen – dann ist das Tool von der alten Seite unabhängig. Fehlt ein Bild lokal, lädt die Oberfläche es ersatzweise direkt von der alten Seite.
+- Die **Grenzen** der Gebiete sind als Flächen auf der Karte eingezeichnet (`lib/grenzen.js`). Sie stammen aus den eingefärbten Flächen der Detailpläne und wurden anhand der Gebäude auf OpenStreetMap eingepasst (Genauigkeit wenige Meter). Benachbarte Gebiete können sich an gemeinsamen Strassen leicht überlappen – so wie in den Plänen. Korrekturen: Gebiet antippen → «Fläche neu zeichnen».
+- **H5 Segantinistrasse** hat keinen Detailplan und ist deshalb nur ein Punkt an ungefährer Lage. Unter «Fläche einzeichnen» wird daraus eine Fläche.
+- Bestehende Datenbanken erhalten die Grenzen beim nächsten Aufruf automatisch – aber nur für Gebiete, die noch ein Punkt sind. Selbst gezeichnete Flächen bleiben unverändert.
+- Die **Detailpläne** (33 PNG-Bilder) liegen in `public/karten/` und gehören zum Repository; das Tool ist damit von der alten Seite unabhängig. `npm run karten` lädt nur noch fehlende Bilder von `ps-ps.ch/gruene-6-10/karten/` nach.
 - Das Team-Passwort schützt vor zufälligen Besuchern, ist aber kein Konto-System: Wer es kennt, kann Gebiete übernehmen und freigeben.

@@ -44,10 +44,17 @@ const mapUrl = (v) => {
   const t = text(v, 500);
   return /^(https:\/\/|\/)/.test(t) ? t : '';
 };
+// Koordinaten müssen echte Längen-/Breitengrade sein – sonst bleibt die Karte bei allen leer.
+const position = (p) => Array.isArray(p) && p.length >= 2 && Number.isFinite(p[0]) && Number.isFinite(p[1])
+  && Math.abs(p[0]) <= 180 && Math.abs(p[1]) <= 90;
+const polygon = (rings) => Array.isArray(rings) && rings.length > 0
+  && rings.every((r) => Array.isArray(r) && r.length >= 4 && r.every(position));
 function geometry(g) {
-  if (!g || !['Point', 'Polygon', 'MultiPolygon'].includes(g.type) || !Array.isArray(g.coordinates)) {
-    throw new Fail(400, 'Das Gebiet braucht eine Position oder Fläche.');
-  }
+  const ok = g && (
+    (g.type === 'Point' && position(g.coordinates))
+    || (g.type === 'Polygon' && polygon(g.coordinates))
+    || (g.type === 'MultiPolygon' && Array.isArray(g.coordinates) && g.coordinates.length > 0 && g.coordinates.every(polygon)));
+  if (!ok) throw new Fail(400, 'Das Gebiet braucht eine Position oder Fläche.');
   const clean = { type: g.type, coordinates: g.coordinates };
   if (JSON.stringify(clean).length > 200000) throw new Fail(400, 'Die Fläche ist zu detailliert.');
   return clean;
@@ -176,7 +183,10 @@ export default async function handler(req, res) {
 
     let wanted = new URL(req.url, 'http://x').searchParams.get('c');
     if (req.method === 'POST') {
-      const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {});
+      let body = req.body || {};
+      if (typeof body === 'string') {
+        try { body = JSON.parse(body || '{}'); } catch { throw new Fail(400, 'Ungültige Anfrage.'); }
+      }
       if (!Object.hasOwn(actions, body.action)) throw new Fail(400, 'Unbekannte Aktion.');
       if (!TEAM_ACTIONS.has(body.action) && role !== 'admin') throw new Fail(403, 'Dafür braucht es das Admin-Passwort.');
       wanted = body.campaign ?? wanted;
@@ -184,9 +194,12 @@ export default async function handler(req, res) {
         const created = await actions[body.action](body);
         if (body.action === 'campaign_create') wanted = created;
       } catch (e) {
+        // Das Gebiet oder die Kampagne wurde inzwischen gelöscht (Fremdschlüssel greift ins Leere).
+        const gone = e?.code === '23503';
         // Bei Konflikten den aktuellen Stand mitschicken, damit die Karte sofort stimmt.
-        if (e instanceof Fail && e.status === 409) {
-          return res.status(409).json({ error: e.message, ...(await snapshot(role, wanted)) });
+        if (gone || (e instanceof Fail && e.status === 409)) {
+          const error = gone ? 'Dieses Gebiet gibt es nicht mehr.' : e.message;
+          return res.status(409).json({ error, ...(await snapshot(role, wanted)) });
         }
         throw e;
       }
