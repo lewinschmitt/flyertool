@@ -7,7 +7,7 @@ Koordiniert, wer in welchem Gebiet Flyer verteilt – mit Karte, mehreren parall
 - **Karte und Liste** aller Gebiete: pink = frei, gelb = vergeben, grün = verteilt
 - **Filter «Nur freie Gebiete»** auf Karte und Liste: hebt hervor, was noch niemand übernommen hat; alles andere tritt in den Hintergrund
 - **Kampagnen-Umschalter** oben: jede Kampagne hat ihren eigenen Verteilstand, die Gebiete bleiben dieselben
-- **Für Freiwillige**: Link öffnen, Name («Anna M.») + Team-Passwort (einmalig), Gebiet antippen, «Ich übernehme dieses Gebiet», später «Fertig verteilt»
+- **Für Freiwillige**: Link öffnen, Vorname + Team-Passwort (einmalig), Gebiet antippen, «Ich übernehme dieses Gebiet», später «Fertig verteilt»
 - **Notizen pro Gebiet** bleiben über Kampagnen hinweg erhalten (z. B. «Briefkästen im Innenhof»)
 - **Verwalten** (mit Admin-Passwort): Kampagnen anlegen/abschliessen/leeren, Gebiete bearbeiten, Flächen einzeichnen, GeoJSON importieren, CSV exportieren, Einladungslink erzeugen
 
@@ -49,6 +49,6 @@ Läuft auf http://localhost:3000 mit einer eingebetteten Datenbank in `./.locald
 - **H5 Segantinistrasse** hat keinen Detailplan und ist deshalb nur ein Punkt an ungefährer Lage. Unter «Fläche einzeichnen» wird daraus eine Fläche.
 - Bestehende Datenbanken erhalten die Grenzen beim nächsten Aufruf automatisch – aber nur für Gebiete, die noch ein Punkt sind. Selbst gezeichnete Flächen bleiben unverändert.
 - Die **Detailpläne** (33 PNG-Bilder) liegen in `public/karten/` und gehören zum Repository; das Tool ist damit von der alten Seite unabhängig. `npm run karten` lädt nur noch fehlende Bilder von `ps-ps.ch/gruene-6-10/karten/` nach.
-- **Namen** erscheinen überall als Vorname mit erstem Buchstaben des Nachnamens («Anna M.»). Wer den ganzen Namen eintippt, wird automatisch gekürzt; bestehende Einträge werden einmalig angepasst.
+- **Namen**: Gefragt wird nur der Vorname. Wer freiwillig auch den Nachnamen eintippt, erscheint mit dessen erstem Buchstaben («Anna Muster» → «Anna M.»); der ganze Nachname wird nie gespeichert oder angezeigt. Bestehende Einträge werden einmalig angepasst.
 - **Schutz vor Passwort-Raten**: Nach 10 falschen Passwörtern innert 15 Minuten wird der Absender (IP-Adresse) gesperrt, bis die Fehlversuche aus dem Zeitfenster gefallen sind – auch für das richtige Passwort. Die Werte stehen oben in `api/data.js` (`MAX_FAILURES`, `WINDOW_MIN`). Wer hinter derselben Adresse sitzt (z. B. gemeinsames WLAN), ist mitgesperrt. Gegen Angriffe von sehr vielen Adressen hilft nur ein langes Passwort.
 - Das Team-Passwort schützt vor zufälligen Besuchern, ist aber kein Konto-System: Wer es kennt, kann Gebiete übernehmen und freigeben.

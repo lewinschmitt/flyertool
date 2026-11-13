@@ -541,7 +541,7 @@ const ADMIN = {
   async invite() {
     const v = await ask({
       title: 'Einladungslink',
-      text: 'Mit dem Team-Passwort im Link müssen Freiwillige nur noch ihren Namen eingeben. Leer lassen für einen Link ohne Passwort.',
+      text: 'Mit dem Team-Passwort im Link müssen Freiwillige nur noch ihren Vornamen eingeben. Leer lassen für einen Link ohne Passwort.',
       fields: [{ name: 'pw', label: 'Team-Passwort (nicht das Admin-Passwort)' }], ok: 'Link kopieren',
     });
     if (!v) return;
@@ -593,11 +593,11 @@ async function login(error) {
   const v = await ask({
     title: needPw ? 'Willkommen!' : 'Dein Name',
     text: needPw
-      ? 'Hier koordinieren wir, wer wo Flyer verteilt. Gib deinen Namen und das Team-Passwort ein – das brauchst du nur einmal.'
-      : 'Unter diesem Namen sehen die anderen, welche Gebiete du übernommen hast. Vom Nachnamen bleibt nur der erste Buchstabe.',
+      ? 'Hier koordinieren wir, wer wo Flyer verteilt. Gib deinen Vornamen und das Team-Passwort ein – das brauchst du nur einmal.'
+      : 'Unter diesem Namen sehen die anderen, welche Gebiete du übernommen hast.',
     error,
     fields: [
-      { name: 'name', label: 'Vorname und erster Buchstabe des Nachnamens', placeholder: 'z. B. Anna M.', value: S.name, required: true, maxlength: 40, autocomplete: 'name' },
+      { name: 'name', label: 'Vorname', value: S.name, required: true, maxlength: 40, autocomplete: 'given-name' },
       ...(needPw ? [{ name: 'pw', label: 'Team-Passwort', type: 'password', required: true, autocomplete: 'current-password' }] : []),
     ],
     ok: needPw ? 'Los geht’s' : 'Speichern',
