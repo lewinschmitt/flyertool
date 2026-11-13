@@ -47,6 +47,9 @@ main { flex: 1; position: relative; min-height: 0; }
 .row .txt { flex: 1; min-width: 0; }
 .row b { display: block; font-size: 15px; }
 .row small { color: var(--muted); font-size: 13px; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.elsewhere { margin-top: 26px; border-top: 2px solid var(--line); padding-top: 4px; }
+.elsewhere .sep { font-size: 15px; font-weight: 700; margin: 14px 4px 0; }
+.elsewhere .row { background: transparent; }
 .empty { text-align: center; color: var(--muted); padding: 40px 20px; line-height: 1.5; }
 
 /* Gebiets-Marken */

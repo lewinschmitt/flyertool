@@ -10,6 +10,7 @@ Koordiniert, wer in welchem Gebiet Flyer verteilt – mit Karte, mehreren parall
 - **Für Freiwillige**: Link öffnen, Vorname + Team-Passwort (einmalig), Gebiet antippen, «Ich übernehme dieses Gebiet», später «Fertig verteilt»
 - **Beim Übernehmen** fragt das Tool, wie viele Flyer jemand nimmt und woher sie kommen: «Ich habe die Flyer schon» oder Abholung bei einem der Abholorte, mit Wunschtermin. Die Abholorte (Name, Adresse, Kontakt) legst du unter «Verwalten» an; dort stehen auch die offenen Abholungen pro Ort.
 - **Beim Abschliessen** gibt es neben der Anzahl verteilter Flyer ein Textfeld «Zu wenig Flyer gehabt?» – der Eintrag erscheint gelb markiert beim Gebiet, in der Liste und im CSV-Export.
+- **«Meine Gebiete»** zeigt zuerst die eigenen Gebiete der gewählten Kampagne, darunter abgesetzt jene aus anderen Kampagnen – erst laufende, dann abgeschlossene
 - **Notizen pro Gebiet** bleiben über Kampagnen hinweg erhalten (z. B. «Briefkästen im Innenhof»)
 - **Verwalten** (mit Admin-Passwort): Kampagnen anlegen/abschliessen/leeren, Gebiete bearbeiten, Flächen einzeichnen, GeoJSON importieren, CSV exportieren, Einladungslink erzeugen
 

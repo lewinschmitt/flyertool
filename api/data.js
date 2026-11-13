@@ -234,7 +234,7 @@ const actions = {
 const TEAM_ACTIONS = new Set(['claim', 'done', 'reopen', 'release', 'comment']);
 
 // ---- Aktueller Stand ----------------------------------------------------------
-async function snapshot(role, wanted) {
+async function snapshot(role, wanted, name = '') {
   const all = await q`SELECT id, name, archived FROM campaigns ORDER BY archived, created_at DESC, id DESC`;
   const campaigns = role === 'admin' ? all : all.filter((c) => !c.archived);
   const current = campaigns.find((c) => c.id === Number(wanted)) || campaigns.find((c) => !c.archived) || campaigns[0] || null;
@@ -252,7 +252,14 @@ async function snapshot(role, wanted) {
   ]);
   const byArea = new Map(areas.map((a) => [a.id, Object.assign(a, { comments: [] })]));
   for (const { area_id, ...c } of comments) byArea.get(area_id)?.comments.push(c);
-  return { role, campaigns, campaign: current ? current.id : null, areas, pickups };
+  // Für «Meine Gebiete»: was dieselbe Person in den anderen Kampagnen übernommen hat –
+  // zuerst laufende, dann abgeschlossene Kampagnen; innerhalb einer Kampagne Offenes vor Erledigtem.
+  const elsewhere = name ? await q`
+    SELECT s.campaign_id, k.name AS campaign, k.archived, s.area_id, s.status, s.claimed_at, s.done_at
+    FROM assignments s JOIN campaigns k ON k.id = s.campaign_id
+    WHERE lower(s.person) = lower(${name}) AND s.campaign_id <> ${cid}
+    ORDER BY k.archived, k.created_at DESC, k.id DESC, s.status, s.area_id` : [];
+  return { role, campaigns, campaign: current ? current.id : null, areas, pickups, elsewhere };
 }
 
 export default async function handler(req, res) {
@@ -268,6 +275,10 @@ export default async function handler(req, res) {
       throw new Fail(401, 'Passwort stimmt nicht.');
     }
 
+    // Der Name dient nur dazu, die eigenen Gebiete aus anderen Kampagnen mitzuliefern.
+    let name = String(req.headers['x-name'] || '');
+    try { name = decodeURIComponent(name); } catch { /* unverändert verwenden */ }
+    name = shortName(text(name, 80)).slice(0, 40);
     let wanted = new URL(req.url, 'http://x').searchParams.get('c');
     let notice;
     if (req.method === 'POST') {
@@ -288,14 +299,14 @@ export default async function handler(req, res) {
         // Bei Konflikten den aktuellen Stand mitschicken, damit die Karte sofort stimmt.
         if (gone || (e instanceof Fail && e.status === 409)) {
           const error = gone ? 'Dieses Gebiet gibt es nicht mehr.' : e.message;
-          return res.status(409).json({ error, ...(await snapshot(role, wanted)) });
+          return res.status(409).json({ error, ...(await snapshot(role, wanted, name)) });
         }
         throw e;
       }
     } else if (req.method !== 'GET') {
       throw new Fail(405, 'Methode nicht erlaubt.');
     }
-    return res.status(200).json({ ...(await snapshot(role, wanted)), ...(notice && { notice }) });
+    return res.status(200).json({ ...(await snapshot(role, wanted, name)), ...(notice && { notice }) });
   } catch (e) {
     if (e instanceof Fail) return res.status(e.status).json({ error: e.message });
     console.error(e);

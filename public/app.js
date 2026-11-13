@@ -43,6 +43,7 @@ const S = {
   role: null,
   campaigns: [],
   pickups: [],
+  elsewhere: [],
   campaign: Number(params.get('k') || store.get('campaign')) || null,
   areas: [],
   selected: null,
@@ -59,7 +60,7 @@ const currentCampaign = () => S.campaigns.find((c) => c.id === S.campaign);
 async function api(body) {
   const res = await fetch('/api/data' + (S.campaign ? '?c=' + S.campaign : ''), {
     method: body ? 'POST' : 'GET',
-    headers: { 'content-type': 'application/json', 'x-password': encodeURIComponent(S.pw) },
+    headers: { 'content-type': 'application/json', 'x-password': encodeURIComponent(S.pw), 'x-name': encodeURIComponent(S.name) },
     body: body ? JSON.stringify({ campaign: S.campaign, ...body }) : undefined,
   });
   const data = await res.json().catch(() => ({}));
@@ -84,6 +85,7 @@ function apply(data) {
   S.role = data.role;
   S.campaigns = data.campaigns;
   S.pickups = data.pickups || [];
+  S.elsewhere = data.elsewhere || [];
   S.campaign = data.campaign;
   S.areas = data.areas.sort((a, b) => (a.code || a.name).localeCompare(b.code || b.name, 'de', { numeric: true }));
   if (S.campaign) {
@@ -282,10 +284,11 @@ function renderList() {
   const pool = mineOnly ? S.areas.filter(isMine) : S.areas;
   const filter = mineOnly || !S.areas.length ? '' : `<button type="button" class="filter" data-filter aria-pressed="${S.onlyFree}">${filterLabel()}</button>`;
   if (!currentCampaign()) { box.innerHTML = '<p class="empty">Es läuft gerade keine Kampagne.</p>'; return; }
+  const others = mineOnly ? otherCampaigns() : '';
   if (!pool.length) {
     box.innerHTML = `<p class="empty">${mineOnly
       ? 'Du hast in dieser Kampagne noch kein Gebiet übernommen.<br>Tippe auf der Karte auf ein pinkes Gebiet.'
-      : 'Noch keine Gebiete erfasst.'}</p>`;
+      : 'Noch keine Gebiete erfasst.'}</p>${others}`;
     return;
   }
   const groups = mineOnly
@@ -304,12 +307,37 @@ function renderList() {
         <span class="txt"><b>${esc(a.name)}</b><small>${detail}</small></span>
       </button>`;
     }).join('');
-  }).join('') || '<p class="empty">In dieser Kampagne ist kein Gebiet mehr frei.</p>');
+  }).join('') || '<p class="empty">In dieser Kampagne ist kein Gebiet mehr frei.</p>') + others;
+}
+
+// «Meine Gebiete» aus den übrigen Kampagnen, abgesetzt unter der gewählten: erst laufende, dann abgeschlossene.
+function otherCampaigns() {
+  const groups = new Map();
+  for (const e of S.elsewhere) {
+    if (!groups.has(e.campaign_id)) groups.set(e.campaign_id, { ...e, rows: [] });
+    groups.get(e.campaign_id).rows.push(e);
+  }
+  if (!groups.size) return '';
+  return '<div class="elsewhere"><p class="sep">Deine Gebiete in anderen Kampagnen</p>' + [...groups.values()].map((g) => `
+    <h2>${esc(g.campaign)}${g.archived ? ' · abgeschlossen' : ''} (${g.rows.length})</h2>` + g.rows.map((e) => {
+    const a = area(e.area_id);
+    if (!a) return '';
+    return `<button type="button" class="row" data-id="${a.id}" data-campaign="${e.campaign_id}">
+        <span class="badge static ${e.status}">${esc(a.code || '•')}${MARK[e.status]}</span>
+        <span class="txt"><b>${esc(a.name)}</b><small>${e.status === 'done' ? `verteilt am ${day(e.done_at)}` : `noch zu verteilen · übernommen am ${day(e.claimed_at)}`}</small></span>
+      </button>`;
+  }).join('')).join('') + '</div>';
 }
 $('#list').onclick = (e) => {
   if (e.target.closest('[data-filter]')) return toggleOnlyFree();
   const row = e.target.closest('.row');
-  if (row) select(Number(row.dataset.id), true);
+  if (!row) return;
+  const other = Number(row.dataset.campaign);
+  if (!other) return select(Number(row.dataset.id), true);
+  // Gebiet aus einer anderen Kampagne: dorthin wechseln, sofern sie in der Auswahl steht.
+  if (!S.campaigns.some((c) => c.id === other)) return toast('Diese Kampagne ist abgeschlossen.');
+  S.campaign = other;
+  load().then(() => select(Number(row.dataset.id), true));
 };
 
 function setView(view) {
@@ -695,7 +723,8 @@ async function login(error) {
   loggingIn = false;
   if (!v) return;
   S.name = shortName(v.name); store.set('name', S.name);
-  if (needPw) { S.pw = v.pw; store.set('pw', S.pw); load(); } else render();
+  if (needPw) { S.pw = v.pw; store.set('pw', S.pw); }
+  load();
 }
 async function needName() {
   if (!S.name) await login();
