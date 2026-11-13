@@ -360,7 +360,7 @@ function renderSheet(force) {
   } else if (a.status === 'claimed') {
     state = mine ? `<b>Du</b> hast dieses Gebiet übernommen (${day(a.claimed_at)}).` : `Übernommen von <b>${esc(a.person)}</b> (${day(a.claimed_at)}).`;
     buttons = mine
-      ? `<div class="actions"><button class="btn primary" data-act="done">Fertig verteilt ✓</button>
+      ? `<div class="actions"><button class="btn primary" data-act="done">Fertig verteilt?</button>
          <button class="btn" data-act="release">Doch wieder freigeben</button></div>`
       : `<div class="actions two"><button class="btn" data-act="done">Als verteilt markieren</button>
          <button class="btn" data-act="release">Freigeben</button></div>`;
