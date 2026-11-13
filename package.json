@@ -9,9 +9,12 @@
     "karten": "node scripts/karten.js",
     "build": "node scripts/karten.js"
   },
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "dependencies": {
-    "@neondatabase/serverless": "^1.0.0"
+    "@neondatabase/serverless": "^1.0.0",
+    "polyclip-ts": "^0.16.8"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.2.17"

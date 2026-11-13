@@ -40,14 +40,16 @@ Läuft auf http://localhost:3000 mit einer eingebetteten Datenbank in `./.locald
 | `lib/seed.js` | Startdaten der 34 Gebiete |
 | `lib/altnotizen.js` | Kommentare aus dem bisherigen Tool, werden einmalig als Notizen eingespielt |
 | `lib/grenzen.js` | Grenzen der Gebiete als GeoJSON-Flächen |
+| `lib/flaechen.js` | Regel «Gebiete überlappen sich nicht»: schneidet neue Flächen an den Nachbarn ab |
 | `public/karten/` | Detailpläne der Gebiete (PNG) |
 | `dev.js` | Lokaler Entwicklungsserver |
 
 ## Gut zu wissen
 
-- Die **Grenzen** der Gebiete sind als Flächen auf der Karte eingezeichnet (`lib/grenzen.js`). Sie stammen aus den eingefärbten Flächen der Detailpläne und wurden anhand der Gebäude auf OpenStreetMap eingepasst (Genauigkeit wenige Meter). Benachbarte Gebiete können sich an gemeinsamen Strassen leicht überlappen – so wie in den Plänen. Korrekturen: Gebiet antippen → «Fläche neu zeichnen».
-- **H5 Segantinistrasse** hat keinen Detailplan und ist deshalb nur ein Punkt an ungefährer Lage. Unter «Fläche einzeichnen» wird daraus eine Fläche.
-- Bestehende Datenbanken erhalten die Grenzen beim nächsten Aufruf automatisch – aber nur für Gebiete, die noch ein Punkt sind. Selbst gezeichnete Flächen bleiben unverändert.
+- Die **Grenzen** der Gebiete (`lib/grenzen.js`) folgen den Strassenachsen von OpenStreetMap: ein Gebiet reicht bis zur Strassenmitte, Nachbarn teilen sich dort genau dieselbe Linie. Welche Häuserblöcke zu einem Gebiet gehören, bestimmen die eingefärbten Flächen der Detailpläne. Wo ein Plan mitten durch einen Block schneidet (oder an Wald und Fluss endet), folgt die Grenze dem Plan.
+- **Gebiete überlappen sich nicht.** Das gilt auch beim Bearbeiten: Eine neu gezeichnete oder importierte Fläche wird an den bestehenden Gebieten abgeschnitten. Man kann also grosszügig über die Nachbarn hinaus zeichnen; liegt die Fläche ganz in anderen Gebieten, wird sie abgelehnt. Beim Zeichnen rasten die Eckpunkte an bestehenden Grenzen ein.
+- **H5 Segantinistrasse** hat keinen Detailplan. Seine Fläche ist eine Schätzung: der Block zwischen den Nachbargebieten, auf den die alte Übersichtskarte zeigt. Bitte prüfen und bei Bedarf neu zeichnen.
+- Bestehende Datenbanken erhalten die neuen Grenzen beim nächsten Aufruf automatisch – ausser bei Gebieten, deren Fläche von Hand geändert wurde.
 - Die **Detailpläne** (33 PNG-Bilder) liegen in `public/karten/` und gehören zum Repository; das Tool ist damit von der alten Seite unabhängig. `npm run karten` lädt nur noch fehlende Bilder von `ps-ps.ch/gruene-6-10/karten/` nach.
 - **Namen**: Gefragt wird nur der Vorname. Wer freiwillig auch den Nachnamen eintippt, erscheint mit dessen erstem Buchstaben («Anna Muster» → «Anna M.»); der ganze Nachname wird nie gespeichert oder angezeigt. Bestehende Einträge werden einmalig angepasst.
 - **Schutz vor Passwort-Raten**: Nach 10 falschen Passwörtern innert 15 Minuten wird der Absender (IP-Adresse) gesperrt, bis die Fehlversuche aus dem Zeitfenster gefallen sind – auch für das richtige Passwort. Die Werte stehen oben in `api/data.js` (`MAX_FAILURES`, `WINDOW_MIN`). Wer hinter derselben Adresse sitzt (z. B. gemeinsames WLAN), ist mitgesperrt. Gegen Angriffe von sehr vielen Adressen hilft nur ein langes Passwort.

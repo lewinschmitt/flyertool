@@ -1,6 +1,7 @@
 import { timingSafeEqual, createHash } from 'node:crypto';
 import { q, query, INSERT_AREAS } from '../lib/db.js';
 import { shortName } from '../lib/name.js';
+import { withoutOverlap } from '../lib/flaechen.js';
 
 const local = !process.env.VERCEL;
 const TEAM_PW = process.env.TEAM_PASSWORD || (local ? 'gruen' : '');
@@ -88,6 +89,16 @@ function geometry(g) {
   if (JSON.stringify(clean).length > 200000) throw new Fail(400, 'Die Fläche ist zu detailliert.');
   return clean;
 }
+// Gebiete dürfen sich nicht überlappen: die neue Fläche wird an allen anderen abgeschnitten.
+const TRIMMED = 'Die Fläche wurde an den Nachbargebieten abgeschnitten – Gebiete überlappen sich nicht.';
+function fitted(g, others) {
+  let fit;
+  try { fit = withoutOverlap(g, others); } catch { throw new Fail(400, 'Die Fläche ist ungültig – bitte neu zeichnen.'); }
+  if (!fit) throw new Fail(400, 'Die Fläche liegt ganz in bestehenden Gebieten. Gebiete dürfen sich nicht überlappen.');
+  return fit;
+}
+const otherShapes = async (exceptId = 0) => (await q`SELECT geometry FROM areas WHERE id <> ${exceptId}`).map((r) => r.geometry);
+
 const areaFields = (b) => ({
   code: text(b.code, 12),
   name: required(b.name, 60, 'Bitte gib dem Gebiet einen Namen.'),
@@ -160,7 +171,10 @@ const actions = {
     await q`DELETE FROM assignments WHERE campaign_id = ${id(b.id, 'Kampagne')}`;
   },
   async area_create(b) {
-    await query(INSERT_AREAS, [JSON.stringify([{ ...areaFields(b), geometry: geometry(b.geometry) }])]);
+    const fields = areaFields(b);
+    const fit = fitted(geometry(b.geometry), await otherShapes());
+    await query(INSERT_AREAS, [JSON.stringify([{ ...fields, geometry: fit.geometry }])]);
+    return fit.trimmed ? { notice: TRIMMED } : undefined;
   },
   async area_update(b) {
     const f = areaFields(b);
@@ -169,16 +183,35 @@ const actions = {
             WHERE id = ${id(b.id)}`;
   },
   async area_reshape(b) {
-    await q`UPDATE areas SET geometry = ${JSON.stringify(geometry(b.geometry))}::jsonb WHERE id = ${id(b.id)}`;
+    const fit = fitted(geometry(b.geometry), await otherShapes(id(b.id)));
+    await q`UPDATE areas SET geometry = ${JSON.stringify(fit.geometry)}::jsonb WHERE id = ${id(b.id)}`;
+    return fit.trimmed ? { notice: TRIMMED } : undefined;
   },
   async area_remove(b) {
     await q`DELETE FROM areas WHERE id = ${id(b.id)}`;
   },
   async area_import(b) {
-    const items = (Array.isArray(b.areas) ? b.areas : []).slice(0, 500)
+    const raw = (Array.isArray(b.areas) ? b.areas : []).slice(0, 500)
       .map((a, i) => ({ ...areaFields({ ...a, name: text(a.name, 60) || `Gebiet ${i + 1}` }), geometry: geometry(a.geometry) }));
-    if (!items.length) throw new Fail(400, 'Keine Gebiete in der Datei gefunden.');
+    if (!raw.length) throw new Fail(400, 'Keine Gebiete in der Datei gefunden.');
+    // Jede Fläche weicht den bestehenden Gebieten und den zuvor importierten aus.
+    const shapes = await otherShapes();
+    const items = [];
+    let trimmed = 0;
+    for (const item of raw) {
+      let fit;
+      try { fit = withoutOverlap(item.geometry, shapes); } catch { fit = null; }
+      if (!fit) continue;
+      if (fit.trimmed) trimmed += 1;
+      shapes.push(fit.geometry);
+      items.push({ ...item, geometry: fit.geometry });
+    }
+    const skipped = raw.length - items.length;
+    if (!items.length) throw new Fail(400, 'Alle Flächen der Datei liegen in bestehenden Gebieten. Gebiete dürfen sich nicht überlappen.');
     await query(INSERT_AREAS, [JSON.stringify(items)]);
+    return trimmed || skipped
+      ? { notice: `${items.length} Gebiete importiert${trimmed ? `, ${trimmed} an Nachbarn abgeschnitten` : ''}${skipped ? `, ${skipped} übersprungen (ganz überlappend oder ungültig)` : ''}.` }
+      : undefined;
   },
 };
 const TEAM_ACTIONS = new Set(['claim', 'done', 'reopen', 'release', 'comment']);
@@ -217,6 +250,7 @@ export default async function handler(req, res) {
     }
 
     let wanted = new URL(req.url, 'http://x').searchParams.get('c');
+    let notice;
     if (req.method === 'POST') {
       let body = req.body || {};
       if (typeof body === 'string') {
@@ -226,8 +260,9 @@ export default async function handler(req, res) {
       if (!TEAM_ACTIONS.has(body.action) && role !== 'admin') throw new Fail(403, 'Dafür braucht es das Admin-Passwort.');
       wanted = body.campaign ?? wanted;
       try {
-        const created = await actions[body.action](body);
-        if (body.action === 'campaign_create') wanted = created;
+        const result = await actions[body.action](body);
+        if (body.action === 'campaign_create') wanted = result;
+        else notice = result?.notice;
       } catch (e) {
         // Das Gebiet oder die Kampagne wurde inzwischen gelöscht (Fremdschlüssel greift ins Leere).
         const gone = e?.code === '23503';
@@ -241,7 +276,7 @@ export default async function handler(req, res) {
     } else if (req.method !== 'GET') {
       throw new Fail(405, 'Methode nicht erlaubt.');
     }
-    return res.status(200).json(await snapshot(role, wanted));
+    return res.status(200).json({ ...(await snapshot(role, wanted)), ...(notice && { notice }) });
   } catch (e) {
     if (e instanceof Fail) return res.status(e.status).json({ error: e.message });
     console.error(e);

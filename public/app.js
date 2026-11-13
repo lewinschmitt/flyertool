@@ -72,7 +72,7 @@ async function api(body) {
   if (!res.ok) { toast(data.error || 'Das hat leider nicht geklappt.'); throw new Error(data.error || 'error'); }
   return data;
 }
-const act = (body, okMessage) => api(body).then(() => { if (okMessage) toast(okMessage); }).catch(() => {});
+const act = (body, okMessage) => api(body).then((data) => { if (data.notice || okMessage) toast(data.notice || okMessage); }).catch(() => {});
 
 function apply(data) {
   S.role = data.role;
@@ -176,6 +176,7 @@ function renderMap() {
     const pin = L.marker(c, {
       interactive,
       keyboard: false,
+      snapIgnore: true,
       zIndexOffset: selected ? 1000 : dimmed(a) ? -500 : 0,
       icon: L.divIcon({
         className: '',
@@ -208,7 +209,8 @@ function startDraw(onDone) {
   S.drawing = { onDone };
   $('#drawbar').hidden = false;
   renderMap();
-  map.pm.enableDraw('Polygon', { snappable: false, continueDrawing: false });
+  // Eckpunkte rasten an den Grenzen der Nachbargebiete ein. Was trotzdem überlappt, schneidet der Server ab.
+  map.pm.enableDraw('Polygon', { snappable: true, snapDistance: 14, continueDrawing: false });
 }
 function stopDraw() {
   S.drawing = null;
