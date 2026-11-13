@@ -23,6 +23,11 @@ function shortName(value) {
 const sameName = (a, b) => !!a && !!b && shortName(a).toLowerCase() === shortName(b).toLowerCase();
 // «1000-1200» → 1200, «ca. 250» → 250, «» → 0
 const flyerNum = (t) => { const m = /(\d+)(?:\s*[-–]\s*(\d+))?/.exec(t || ''); return m ? Number(m[2] || m[1]) : 0; };
+const HAVE = 'bereits abgeholt';
+// E-Mail-Adressen und Telefonnummern in (bereits maskiertem) Text antippbar machen.
+const linkify = (safe) => safe
+  .replace(/[\w.+-]+@[\w-]+(\.[\w-]+)+/g, (m) => `<a href="mailto:${m}">${m}</a>`)
+  .replace(/(?<![\w@.])\+?\d[\d ]{7,}\d/g, (m) => `<a href="tel:${m.replace(/ /g, '')}">${m}</a>`);
 const STATUS = { free: 'frei', claimed: 'vergeben', done: 'verteilt' };
 const LEGACY_PLANS = 'https://www.ps-ps.ch/gruene-6-10/karten/';
 const MARK = { free: '', claimed: ' …', done: ' ✓' };
@@ -37,6 +42,7 @@ const S = {
   name: shortName(store.get('name')),
   role: null,
   campaigns: [],
+  pickups: [],
   campaign: Number(params.get('k') || store.get('campaign')) || null,
   areas: [],
   selected: null,
@@ -77,6 +83,7 @@ const act = (body, okMessage) => api(body).then((data) => { if (data.notice || o
 function apply(data) {
   S.role = data.role;
   S.campaigns = data.campaigns;
+  S.pickups = data.pickups || [];
   S.campaign = data.campaign;
   S.areas = data.areas.sort((a, b) => (a.code || a.name).localeCompare(b.code || b.name, 'de', { numeric: true }));
   if (S.campaign) {
@@ -291,7 +298,7 @@ function renderList() {
     return `<h2>${title} (${rows.length})</h2>` + rows.map((a) => {
       const detail = a.status === 'free'
         ? (a.flyers ? `${esc(a.flyers)} Flyer` : 'Flyerzahl offen')
-        : `${esc(a.person)}${a.status === 'done' ? ' · ' + day(a.done_at) : ''}`;
+        : `${esc(a.person)}${a.status === 'done' ? ' · ' + day(a.done_at) : ''}${a.shortfall ? ' · zu wenig Flyer' : ''}`;
       return `<button type="button" class="row" data-id="${a.id}">
         <span class="badge static ${a.status}${isMine(a) ? ' mine' : ''}">${esc(a.code || '•')}${MARK[a.status]}</span>
         <span class="txt"><b>${esc(a.name)}</b><small>${detail}</small></span>
@@ -366,6 +373,13 @@ function renderSheet(force) {
 
   const c = centerOf(a);
   const approx = a.geometry.type === 'Point';
+  // Was beim Übernehmen angegeben wurde: Anzahl Flyer und woher sie kommen.
+  const order = a.status === 'free' ? '' : [
+    a.ordered != null ? `${a.ordered} Flyer genommen` : '',
+    a.pickup === HAVE ? 'Flyer bereits abgeholt' : a.pickup ? `Abholung: ${esc(a.pickup)}${a.pickup_day ? ` (${esc(a.pickup_day)})` : ''}` : '',
+  ].filter(Boolean).join(' · ');
+  // Wer selbst noch abholen muss, sieht die Kontaktangaben des Abholorts.
+  const place = a.status === 'claimed' && mine ? S.pickups.find((p) => p.label === a.pickup) : null;
   sheet.dataset.kind = 'area';
   sheet.hidden = false;
   sheet.innerHTML = `
@@ -374,7 +388,9 @@ function renderSheet(force) {
       <button class="close" data-act="close" aria-label="Schliessen">×</button>
     </div>
     <p class="state">${state}</p>
-    <p class="meta">${a.flyers ? `Benötigt: ${esc(a.flyers)} Flyer` : 'Flyerzahl noch unbekannt'}</p>
+    <p class="meta">${a.flyers ? `Benötigt: ${esc(a.flyers)} Flyer` : 'Flyerzahl noch unbekannt'}${order ? `<br>${order}` : ''}</p>
+    ${a.shortfall ? `<p class="warn"><b>Zu wenig Flyer:</b> ${esc(a.shortfall)}</p>` : ''}
+    ${place ? `<p class="pickup"><b>Abholen bei ${esc(place.label)}</b>${place.details ? `\n${linkify(esc(place.details))}` : ''}</p>` : ''}
     ${buttons}
     ${a.description ? `<p class="desc">${esc(a.description)}</p>` : ''}
     ${a.map_url ? `<a class="plan" href="${esc(a.map_url)}" target="_blank" rel="noopener">
@@ -426,16 +442,44 @@ $('#sheet').addEventListener('click', async (e) => {
 
   if (kind === 'claim') {
     if (!(await needName())) return;
-    act({ action: 'claim', id, name: S.name }, `${a.code || a.name} gehört dir – danke!`);
+    const v = await ask({
+      title: `${a.code || a.name} übernehmen`,
+      fields: [
+        {
+          name: 'ordered', label: 'Wie viele Flyer nimmst du?', type: 'number', value: flyerNum(a.flyers) || '',
+          hint: `${a.flyers ? `Geschätzt für dieses Gebiet: ${a.flyers}. ` : ''}Mehr oder weniger ist in Ordnung – die Zahlen sind ungenau, und auch ein teilweise verteiltes Gebiet hilft.`,
+        },
+        ...(S.pickups.length ? [
+          {
+            name: 'pickup', label: 'Woher bekommst du die Flyer?', type: 'radio', value: 'have',
+            options: [{ value: 'have', label: 'Ich habe die Flyer schon' },
+              ...S.pickups.map((p) => ({ value: p.id, label: `Ich hole sie ab: ${p.label}`, hint: p.details }))],
+          },
+          {
+            name: 'day', label: 'Wann holst du sie ab?', placeholder: 'z. B. Donnerstagabend', maxlength: 60,
+            hint: 'Bitte vorher kurz Bescheid geben, damit jemand da ist.', when: (x) => x.pickup && x.pickup !== 'have',
+          },
+        ] : []),
+      ],
+      ok: 'Gebiet übernehmen',
+    });
+    if (!v) return;
+    act({ action: 'claim', id, name: S.name, ordered: v.ordered, pickup: v.pickup, day: v.pickup === 'have' ? '' : v.day }, `${a.code || a.name} gehört dir – danke!`);
   } else if (kind === 'done') {
     if (!(await needName())) return;
     const v = await ask({
       title: `${a.code || a.name} verteilt?`,
       text: 'Wenn du magst: Wie viele Flyer hast du ungefähr gebraucht? Das hilft bei der nächsten Planung.',
-      fields: [{ name: 'distributed', label: 'Anzahl Flyer (freiwillig)', type: 'number', placeholder: a.flyers ? `geschätzt: ${a.flyers}` : '' }],
+      fields: [
+        { name: 'distributed', label: 'Anzahl Flyer (freiwillig)', type: 'number', placeholder: a.flyers ? `geschätzt: ${a.flyers}` : '' },
+        {
+          name: 'shortfall', label: 'Zu wenig Flyer gehabt? (freiwillig)', type: 'textarea', maxlength: 500,
+          placeholder: 'Was fehlt noch? z. B. «Rötelstrasse ab Nr. 40, ca. 200 Flyer»',
+        },
+      ],
       ok: 'Als verteilt markieren',
     });
-    if (v) act({ action: 'done', id, name: S.name, distributed: v.distributed }, 'Super, vielen Dank!');
+    if (v) act({ action: 'done', id, name: S.name, distributed: v.distributed, shortfall: v.shortfall }, 'Super, vielen Dank!');
   } else if (kind === 'release') {
     if (!isMine(a) && !(await ask({ title: 'Gebiet freigeben?', text: `${a.person} hat dieses Gebiet übernommen. Bitte nur freigeben, wenn das abgesprochen ist.`, ok: 'Freigeben' }))) return;
     act({ action: 'release', id }, 'Gebiet ist wieder frei.');
@@ -487,6 +531,20 @@ function openAdmin() {
         <button class="btn small danger" data-act="c-remove">Löschen</button>
       </div>`).join('') || '<p class="hint">Noch keine Kampagne – lege die erste an.</p>'}
     <div class="actions"><button class="btn primary" data-act="c-new">Neue Kampagne starten</button></div>
+    <h3 class="sub">Abholorte für Flyer</h3>
+    <p class="hint">Wer ein Gebiet übernimmt, wählt hier, wo die Flyer abgeholt werden. Darunter stehen die offenen Abholungen der gewählten Kampagne.</p>
+    ${S.pickups.map((p) => {
+      const open = S.areas.filter((a) => a.status === 'claimed' && a.pickup === p.label);
+      const total = open.reduce((sum, a) => sum + (a.ordered || 0), 0);
+      return `<div class="camp" data-id="${p.id}">
+        <b>${esc(p.label)}${open.length ? ` <span class="hint">– ${open.length} offen${total ? `, ${total} Flyer` : ''}</span>` : ''}</b>
+        ${p.details ? `<p class="hint pre">${linkify(esc(p.details))}</p>` : ''}
+        ${open.map((a) => `<p class="hint order">${esc(a.code || a.name)} · ${esc(a.person)}${a.ordered != null ? ` · ${a.ordered} Flyer` : ''}${a.pickup_day ? ` · ${esc(a.pickup_day)}` : ''}</p>`).join('')}
+        <button class="btn small" data-act="p-edit">Bearbeiten</button>
+        <button class="btn small danger" data-act="p-remove">Löschen</button>
+      </div>`;
+    }).join('') || '<p class="hint">Noch kein Abholort – ohne Abholort wird beim Übernehmen nur die Anzahl Flyer gefragt.</p>'}
+    <div class="actions"><button class="btn" data-act="p-new">Abholort hinzufügen</button></div>
     <h3 class="sub">Gebiete</h3>
     <p class="hint">Gebiete gelten für alle Kampagnen. Einzelne Gebiete bearbeitest du, indem du sie auf der Karte antippst.</p>
     <div class="actions two">
@@ -498,6 +556,18 @@ function openAdmin() {
       <button class="btn" data-act="invite">Einladungslink</button>
       <button class="btn" data-act="csv">Export (CSV)</button>
     </div>`;
+}
+
+async function pickupForm(p) {
+  const v = await ask({
+    title: p ? 'Abholort bearbeiten' : 'Neuer Abholort',
+    fields: [
+      { name: 'label', label: 'Bei wem / wo (kurz)', value: p?.label, required: true, maxlength: 80, placeholder: 'z. B. Anna M., Musterstrasse 8' },
+      { name: 'details', label: 'Kontakt und Hinweise', type: 'textarea', value: p?.details, maxlength: 600, placeholder: 'Telefon, E-Mail, «bei Abwesenheit im Milchkasten» …' },
+    ],
+    ok: 'Speichern',
+  });
+  if (v) act({ action: 'pickup_save', id: p?.id, ...v }, 'Gespeichert.');
 }
 
 const campOf = (btn) => S.campaigns.find((c) => c.id === Number(btn.closest('.camp').dataset.id));
@@ -522,6 +592,12 @@ const ADMIN = {
   async 'c-remove'(btn) {
     const c = campOf(btn);
     if (await ask({ title: `«${c.name}» löschen?`, text: 'Die Kampagne und ihr Verteilstand werden endgültig gelöscht. Gebiete und Notizen bleiben.', ok: 'Endgültig löschen' })) act({ action: 'campaign_remove', id: c.id });
+  },
+  async 'p-new'() { pickupForm(); },
+  async 'p-edit'(btn) { pickupForm(S.pickups.find((p) => p.id === Number(btn.closest('.camp').dataset.id))); },
+  async 'p-remove'(btn) {
+    const p = S.pickups.find((x) => x.id === Number(btn.closest('.camp').dataset.id));
+    if (await ask({ title: `«${p.label}» löschen?`, text: 'Der Abholort steht danach nicht mehr zur Auswahl. Bereits erfasste Abholungen bleiben beim Gebiet vermerkt.', ok: 'Löschen' })) act({ action: 'pickup_remove', id: p.id });
   },
   'a-new'() { startDraw((geometry) => areaForm(null, geometry)); },
   'a-import'() {
@@ -553,8 +629,8 @@ const ADMIN = {
   },
   csv() {
     const cell = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
-    const rows = [['Kürzel', 'Gebiet', 'Flyer (Plan)', 'Status', 'Person', 'Übernommen', 'Verteilt', 'Flyer (verteilt)', 'Notizen']]
-      .concat(S.areas.map((a) => [a.code, a.name, a.flyers, STATUS[a.status], a.person, a.claimed_at ? day(a.claimed_at) : '', a.done_at ? day(a.done_at) : '', a.distributed, a.comments.map((n) => `${n.author}: ${n.body}`).join(' | ')]));
+    const rows = [['Kürzel', 'Gebiet', 'Flyer (Plan)', 'Status', 'Person', 'Übernommen', 'Flyer (genommen)', 'Abholort', 'Abholung wann', 'Verteilt', 'Flyer (verteilt)', 'Zu wenig Flyer', 'Notizen']]
+      .concat(S.areas.map((a) => [a.code, a.name, a.flyers, STATUS[a.status], a.person, a.claimed_at ? day(a.claimed_at) : '', a.ordered, a.pickup, a.pickup_day, a.done_at ? day(a.done_at) : '', a.distributed, a.shortfall, a.comments.map((n) => `${n.author}: ${n.body}`).join(' | ')]));
     const blob = new Blob(['﻿' + rows.map((r) => r.map(cell).join(';')).join('\r\n')], { type: 'text/csv;charset=utf-8' });
     const link = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: `flyer-${(currentCampaign()?.name || 'export').replace(/[^\wäöüÄÖÜ-]+/g, '_')}.csv` });
     link.click();
@@ -571,16 +647,27 @@ function ask({ title, text, fields = [], ok = 'OK', cancel = 'Abbrechen', error 
       <h2>${esc(title)}</h2>
       ${text ? `<p>${esc(text)}</p>` : ''}
       ${error ? `<p class="error">${esc(error)}</p>` : ''}
-      ${fields.map((f) => `<label class="field">${esc(f.label)}${f.type === 'textarea'
-        ? `<textarea ${attrs(f)}>${esc(f.value || '')}</textarea>`
-        : `<input type="${f.type || 'text'}" ${f.type === 'number' ? 'inputmode="numeric" min="0"' : ''} ${attrs(f)} value="${esc(f.value || '')}">`}</label>`).join('')}
+      ${fields.map((f) => (f.type === 'radio'
+        ? `<fieldset class="field choices" data-field="${f.name}"><legend>${esc(f.label)}</legend>${f.options.map((o) => `<label class="choice">
+            <input type="radio" name="${f.name}" value="${esc(o.value)}" ${String(o.value) === String(f.value) ? 'checked' : ''}>
+            <span><b>${esc(o.label)}</b>${o.hint ? `<small>${linkify(esc(o.hint))}</small>` : ''}</span></label>`).join('')}</fieldset>`
+        : `<label class="field" data-field="${f.name}">${esc(f.label)}${f.type === 'textarea'
+          ? `<textarea ${attrs(f)}>${esc(f.value || '')}</textarea>`
+          : `<input type="${f.type || 'text'}" ${f.type === 'number' ? 'inputmode="numeric" min="0"' : ''} ${attrs(f)} value="${esc(f.value || '')}">`}${f.hint ? `<small>${esc(f.hint)}</small>` : ''}</label>`)).join('')}
       <div class="actions${cancel ? ' two' : ''}">
         ${cancel ? `<button type="button" class="btn" data-cancel>${esc(cancel)}</button>` : ''}
         <button class="btn primary">${esc(ok)}</button>
       </div></form>`;
     modal.hidden = false;
     const form = modal.firstElementChild;
-    (form.querySelector('input, textarea') || form.querySelector('.primary')).focus();
+    // Felder mit «when» erscheinen nur, solange die Bedingung auf die übrigen Eingaben zutrifft.
+    const sync = () => {
+      const values = Object.fromEntries(new FormData(form));
+      for (const f of fields) if (f.when) form.querySelector(`[data-field="${f.name}"]`).hidden = !f.when(values);
+    };
+    form.onchange = sync;
+    sync();
+    (form.querySelector('input:not([type=radio]), textarea') || form.querySelector('.primary')).focus();
     const close = (value) => { modal.hidden = true; modal.innerHTML = ''; resolve(value); };
     form.onsubmit = (e) => { e.preventDefault(); close(Object.fromEntries(new FormData(form))); };
     if (cancel) form.querySelector('[data-cancel]').onclick = () => close(null);

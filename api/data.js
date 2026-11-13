@@ -20,6 +20,9 @@ function roleOf(req) {
   return null;
 }
 
+// So steht es beim Gebiet, wenn jemand die Flyer schon hat.
+const HAVE = 'bereits abgeholt';
+
 class Fail extends Error {
   constructor(status, message) { super(message); this.status = status; }
 }
@@ -119,26 +122,31 @@ async function openCampaign(v) {
 const actions = {
   async claim(b) {
     const cid = await openCampaign(b.campaign);
+    // Abholort als Text festhalten: er bleibt lesbar, auch wenn der Ort später geändert oder gelöscht wird.
+    let pickup = null;
+    if (b.pickup === 'have') pickup = HAVE;
+    else if (b.pickup) pickup = (await q`SELECT label FROM pickups WHERE id = ${id(b.pickup, 'Abholort')}`)[0]?.label ?? null;
+    const when = pickup && pickup !== HAVE ? text(b.day, 60) : '';
     const rows = await q`
-      INSERT INTO assignments (campaign_id, area_id, status, person)
-      VALUES (${cid}, ${id(b.id)}, 'claimed', ${person(b.name)})
+      INSERT INTO assignments (campaign_id, area_id, status, person, ordered, pickup, pickup_day)
+      VALUES (${cid}, ${id(b.id)}, 'claimed', ${person(b.name)}, ${count(b.ordered)}, ${pickup}, ${when || null})
       ON CONFLICT DO NOTHING RETURNING area_id`;
     if (!rows.length) throw new Fail(409, 'Dieses Gebiet wurde gerade von jemand anderem übernommen.');
   },
   async done(b) {
     const cid = await openCampaign(b.campaign);
     const rows = await q`
-      INSERT INTO assignments (campaign_id, area_id, status, person, done_at, distributed)
-      VALUES (${cid}, ${id(b.id)}, 'done', ${person(b.name)}, now(), ${count(b.distributed)})
+      INSERT INTO assignments (campaign_id, area_id, status, person, done_at, distributed, shortfall)
+      VALUES (${cid}, ${id(b.id)}, 'done', ${person(b.name)}, now(), ${count(b.distributed)}, ${text(b.shortfall, 500) || null})
       ON CONFLICT (campaign_id, area_id) DO UPDATE
-        SET status = 'done', done_at = now(), distributed = EXCLUDED.distributed
+        SET status = 'done', done_at = now(), distributed = EXCLUDED.distributed, shortfall = EXCLUDED.shortfall
         WHERE assignments.status <> 'done'
       RETURNING area_id`;
     if (!rows.length) throw new Fail(409, 'Dieses Gebiet ist bereits als verteilt markiert.');
   },
   async reopen(b) {
     const cid = await openCampaign(b.campaign);
-    await q`UPDATE assignments SET status = 'claimed', done_at = NULL, distributed = NULL
+    await q`UPDATE assignments SET status = 'claimed', done_at = NULL, distributed = NULL, shortfall = NULL
             WHERE campaign_id = ${cid} AND area_id = ${id(b.id)}`;
   },
   async release(b) {
@@ -153,6 +161,15 @@ const actions = {
   },
 
   // ---- nur Admin ----
+  async pickup_save(b) {
+    const label = required(b.label, 80, 'Bitte gib dem Abholort einen Namen.');
+    const details = text(b.details, 600);
+    if (b.id) await q`UPDATE pickups SET label = ${label}, details = ${details} WHERE id = ${id(b.id, 'Abholort')}`;
+    else await q`INSERT INTO pickups (label, details) VALUES (${label}, ${details})`;
+  },
+  async pickup_remove(b) {
+    await q`DELETE FROM pickups WHERE id = ${id(b.id, 'Abholort')}`;
+  },
   async comment_remove(b) {
     await q`DELETE FROM comments WHERE id = ${id(b.id, 'Notiz')}`;
   },
@@ -222,18 +239,20 @@ async function snapshot(role, wanted) {
   const campaigns = role === 'admin' ? all : all.filter((c) => !c.archived);
   const current = campaigns.find((c) => c.id === Number(wanted)) || campaigns.find((c) => !c.archived) || campaigns[0] || null;
   const cid = current ? current.id : 0;
-  const [areas, comments] = await Promise.all([
+  const [areas, comments, pickups] = await Promise.all([
     q`SELECT a.id, a.code, a.name, a.flyers, a.description, a.map_url, a.geometry,
-             COALESCE(s.status, 'free') AS status, s.person, s.claimed_at, s.done_at, s.distributed
+             COALESCE(s.status, 'free') AS status, s.person, s.claimed_at, s.done_at, s.distributed,
+             s.ordered, s.pickup, s.pickup_day, s.shortfall
       FROM areas a LEFT JOIN assignments s ON s.area_id = a.id AND s.campaign_id = ${cid}
       ORDER BY a.id`,
     q`SELECT c.id, c.area_id, c.author, c.body, c.created_at, k.name AS campaign
       FROM comments c LEFT JOIN campaigns k ON k.id = c.campaign_id
       ORDER BY c.created_at, c.id`,
+    q`SELECT id, label, details FROM pickups ORDER BY id`,
   ]);
   const byArea = new Map(areas.map((a) => [a.id, Object.assign(a, { comments: [] })]));
   for (const { area_id, ...c } of comments) byArea.get(area_id)?.comments.push(c);
-  return { role, campaigns, campaign: current ? current.id : null, areas };
+  return { role, campaigns, campaign: current ? current.id : null, areas, pickups };
 }
 
 export default async function handler(req, res) {
