@@ -7,7 +7,7 @@ Koordiniert, wer in welchem Gebiet Flyer verteilt – mit Karte, mehreren parall
 - **Karte und Liste** aller Gebiete: pink = frei, gelb = vergeben, grün = verteilt
 - **Filter «Nur freie Gebiete»** auf Karte und Liste: hebt hervor, was noch niemand übernommen hat; alles andere tritt in den Hintergrund
 - **Kampagnen-Umschalter** oben: jede Kampagne hat ihren eigenen Verteilstand, die Gebiete bleiben dieselben
-- **Für Freiwillige**: Link öffnen, Vorname + Team-Passwort (einmalig), Gebiet antippen, «Ich übernehme dieses Gebiet», später «Fertig verteilt»
+- **Für Freiwillige**: Link öffnen, Name + Team-Passwort (einmalig), Gebiet antippen, «Ich übernehme dieses Gebiet», später «Fertig verteilt»
 - **Beim Übernehmen** fragt das Tool, wie viele Flyer jemand nimmt und woher sie kommen: «Ich habe die Flyer schon» oder Abholung bei einem der Abholorte, mit Wunschtermin. Die Abholorte (Name, Adresse, Kontakt) legst du unter «Verwalten» an; dort stehen auch die offenen Abholungen pro Ort.
 - **Beim Abschliessen** gibt es neben der Anzahl verteilter Flyer ein Textfeld «Zu wenig Flyer gehabt?» – der Eintrag erscheint gelb markiert beim Gebiet, in der Liste und im CSV-Export.
 - **«Meine Gebiete»** zeigt zuerst die eigenen Gebiete der gewählten Kampagne, darunter abgesetzt jene aus anderen Kampagnen – erst laufende, dann abgeschlossene
@@ -54,6 +54,6 @@ Läuft auf http://localhost:3000 mit einer eingebetteten Datenbank in `./.locald
 - **H5 Segantinistrasse** hat keinen Detailplan. Seine Fläche ist eine Schätzung: der Block zwischen den Nachbargebieten, auf den die alte Übersichtskarte zeigt. Bitte prüfen und bei Bedarf neu zeichnen.
 - Bestehende Datenbanken erhalten die neuen Grenzen beim nächsten Aufruf automatisch – ausser bei Gebieten, deren Fläche von Hand geändert wurde.
 - Die **Detailpläne** (33 PNG-Bilder) liegen in `public/karten/` und gehören zum Repository; das Tool ist damit von der alten Seite unabhängig. `npm run karten` lädt nur noch fehlende Bilder von `ps-ps.ch/gruene-6-10/karten/` nach.
-- **Namen**: Gefragt wird nur der Vorname. Wer freiwillig auch den Nachnamen eintippt, erscheint mit dessen erstem Buchstaben («Anna Muster» → «Anna M.»); der ganze Nachname wird nie gespeichert oder angezeigt. Bestehende Einträge werden einmalig angepasst.
+- **Namen**: Gefragt wird einfach nach dem Namen – ob Vorname, Spitzname oder ganzer Name, entscheidet jede Person selbst. Wer auch einen Nachnamen eintippt, erscheint mit dessen erstem Buchstaben («Anna Muster» → «Anna M.»); der ganze Nachname wird nie gespeichert oder angezeigt. Bestehende Einträge werden einmalig angepasst.
 - **Schutz vor Passwort-Raten**: Nach 10 falschen Passwörtern innert 15 Minuten wird der Absender (IP-Adresse) gesperrt, bis die Fehlversuche aus dem Zeitfenster gefallen sind – auch für das richtige Passwort. Die Werte stehen oben in `api/data.js` (`MAX_FAILURES`, `WINDOW_MIN`). Wer hinter derselben Adresse sitzt (z. B. gemeinsames WLAN), ist mitgesperrt. Gegen Angriffe von sehr vielen Adressen hilft nur ein langes Passwort.
 - Das Team-Passwort schützt vor zufälligen Besuchern, ist aber kein Konto-System: Wer es kennt, kann Gebiete übernehmen und freigeben.
