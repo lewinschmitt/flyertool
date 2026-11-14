@@ -28,8 +28,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .top h1 span { font-weight: 400; opacity: .8; font-size: 13px; margin-left: 4px; white-space: nowrap; }
 .chip { border: 1px solid rgba(255,255,255,.45); background: transparent; color: #fff; border-radius: 99px; padding: 5px 11px; font-size: 13px; cursor: pointer; max-width: 38vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .chip-admin { background: #fff; color: var(--green); border-color: #fff; font-weight: 600; }
-.campaign { display: flex; align-items: center; gap: 6px; background: #fff; color: var(--ink); border-radius: 10px; padding: 0 4px 0 10px; min-width: 0; flex: 1 1 55%; }
-.campaign span { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+.campaign { display: flex; align-items: center; background: #fff; color: var(--ink); border-radius: 10px; padding: 0 4px 0 6px; min-width: 0; flex: 1 1 55%; }
 .campaign select { border: 0; background: transparent; padding: 9px 4px; font-weight: 600; min-width: 0; flex: 1; text-overflow: ellipsis; }
 .progress { flex: 1 1 45%; font-size: 12px; line-height: 1.25; min-width: 0; }
 .progress .bar { height: 7px; border-radius: 9px; background: rgba(255,255,255,.25); overflow: hidden; display: flex; margin-top: 4px; }
