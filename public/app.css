@@ -99,6 +99,7 @@ main { flex: 1; position: relative; min-height: 0; }
 .btn.primary { background: var(--green); border-color: var(--green); color: #fff; }
 .btn.go { background: var(--magenta); border-color: var(--magenta); color: #fff; }
 .btn.danger { color: #a3180f; }
+.btn.link { border: 0; background: none; color: var(--muted); font-weight: 500; text-decoration: underline; margin: 6px auto 0; }
 .btn.small { padding: 7px 12px; font-size: 14px; border-radius: 9px; }
 .btn:disabled { opacity: .5; }
 .sub { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 18px 0 6px; }

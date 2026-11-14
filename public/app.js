@@ -667,7 +667,8 @@ const ADMIN = {
 };
 
 /* ---------- Dialoge ---------- */
-function ask({ title, text, fields = [], ok = 'OK', cancel = 'Abbrechen', error }) {
+// `extra`: zusätzliche Schaltfläche unter den Hauptaktionen; sie beendet den Dialog mit ihrem `value`.
+function ask({ title, text, fields = [], ok = 'OK', cancel = 'Abbrechen', error, extra }) {
   return new Promise((resolve) => {
     const modal = $('#modal');
     const attrs = (f) => `name="${f.name}" ${f.required ? 'required' : ''} ${f.maxlength ? `maxlength="${f.maxlength}"` : ''} placeholder="${esc(f.placeholder || '')}" ${f.autocomplete ? `autocomplete="${f.autocomplete}"` : ''}`;
@@ -685,7 +686,8 @@ function ask({ title, text, fields = [], ok = 'OK', cancel = 'Abbrechen', error 
       <div class="actions${cancel ? ' two' : ''}">
         ${cancel ? `<button type="button" class="btn" data-cancel>${esc(cancel)}</button>` : ''}
         <button class="btn primary">${esc(ok)}</button>
-      </div></form>`;
+      </div>
+      ${extra ? `<button type="button" class="btn small link" data-extra>${esc(extra.label)}</button>` : ''}</form>`;
     modal.hidden = false;
     const form = modal.firstElementChild;
     // Felder mit «when» erscheinen nur, solange die Bedingung auf die übrigen Eingaben zutrifft.
@@ -699,6 +701,7 @@ function ask({ title, text, fields = [], ok = 'OK', cancel = 'Abbrechen', error 
     const close = (value) => { modal.hidden = true; modal.innerHTML = ''; resolve(value); };
     form.onsubmit = (e) => { e.preventDefault(); close(Object.fromEntries(new FormData(form))); };
     if (cancel) form.querySelector('[data-cancel]').onclick = () => close(null);
+    if (extra) form.querySelector('[data-extra]').onclick = () => close(extra.value);
   });
 }
 
@@ -719,12 +722,19 @@ async function login(error) {
     ],
     ok: needPw ? 'Los geht’s' : 'Speichern',
     cancel: needPw || !S.name ? '' : 'Abbrechen',
+    extra: needPw ? null : { label: 'Ausloggen', value: 'logout' },
   });
   loggingIn = false;
+  if (v === 'logout') return logout();
   if (!v) return;
   S.name = shortName(v.name); store.set('name', S.name);
   if (needPw) { S.pw = v.pw; store.set('pw', S.pw); }
   load();
+}
+// Ausloggen: Passwort und Name auf diesem Gerät vergessen und neu starten.
+function logout() {
+  for (const key of ['pw', 'name', 'campaign']) store.set(key, '');
+  location.replace(location.pathname);
 }
 async function needName() {
   if (!S.name) await login();
